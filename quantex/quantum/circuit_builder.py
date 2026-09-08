@@ -4,7 +4,6 @@ Quantum Circuit Builder and Visualizer for QAOA and VQE Routing Circuits.
 
 from typing import Dict, Any, Optional, Tuple
 import numpy as np
-import matplotlib.pyplot as plt
 
 try:
     from qiskit import QuantumCircuit
