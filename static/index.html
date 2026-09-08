@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quantex | Quantum Fleet & Last-Mile Logistics Engine</title>
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="/static/css/style.css">
+  
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+</head>
+<body>
+
+  <!-- Three.js 3D Quantum Space Background Canvas -->
+  <div id="quantum-canvas-container"></div>
+
+  <!-- Main Application Container -->
+  <div class="app-container">
+
+    <!-- Navbar Header -->
+    <header class="navbar-header glass-panel">
+      <div class="brand-title">
+        <i class="fa-solid fa-bolt" style="color: #8b5cf6;"></i>
+        <span>QUANTEX</span>
+        <span class="brand-badge">QISKIT FALL FEST 2026</span>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <span style="font-size: 13px; color: #94a3b8;"><i class="fa-solid fa-atom" style="color:#06b6d4;"></i> QAOA & VQE Engine</span>
+        <span class="brand-badge" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.5); color: #6ee7b7;">
+          <i class="fa-solid fa-leaf"></i> Net-Zero Logistics
+        </span>
+      </div>
+    </header>
+
+    <!-- Top KPI Metrics -->
+    <div class="kpi-row">
+      <div class="glass-panel kpi-card">
+        <span class="kpi-label"><i class="fa-solid fa-route"></i> Fleet Distance</span>
+        <span class="kpi-value" id="kpi-dist">0.00 km</span>
+        <span class="kpi-delta" id="kpi-dist-delta">Optimal</span>
+      </div>
+      <div class="glass-panel kpi-card cyan">
+        <span class="kpi-label"><i class="fa-solid fa-gas-pump"></i> Fuel Consumed</span>
+        <span class="kpi-value" id="kpi-fuel">0.00 L</span>
+        <span class="kpi-delta" id="kpi-fuel-delta">Optimal</span>
+      </div>
+      <div class="glass-panel kpi-card green">
+        <span class="kpi-label"><i class="fa-solid fa-seedling"></i> Carbon Abated</span>
+        <span class="kpi-value" id="kpi-co2">0.00 kg</span>
+        <span class="kpi-delta" id="kpi-co2-delta">Optimal</span>
+      </div>
+      <div class="glass-panel kpi-card amber">
+        <span class="kpi-label"><i class="fa-solid fa-clock"></i> Fleet Transit</span>
+        <span class="kpi-value" id="kpi-time">0.0 min</span>
+        <span class="kpi-delta" id="kpi-time-delta">Optimal</span>
+      </div>
+      <div class="glass-panel kpi-card pink">
+        <span class="kpi-label"><i class="fa-solid fa-dollar-sign"></i> Operational Cost</span>
+        <span class="kpi-value" id="kpi-cost">$0.00</span>
+        <span class="kpi-delta" id="kpi-cost-delta">Optimal</span>
+      </div>
+    </div>
+
+    <!-- Dashboard Grid: Sidebar Controls + Main Content Tabs -->
+    <div class="dashboard-grid">
+
+      <!-- Sidebar Controls -->
+      <aside class="glass-panel control-section">
+        <div class="control-title">
+          <i class="fa-solid fa-sliders" style="color:#8b5cf6;"></i>
+          <span>Quantum Mission Control</span>
+        </div>
+
+        <div class="form-group">
+          <label for="preset-select">Logistics Domain Scenario:</label>
+          <select id="preset-select" class="custom-select"></select>
+        </div>
+
+        <div class="form-group">
+          <label for="solver-select">Quantum Solver Algorithm:</label>
+          <select id="solver-select" class="custom-select">
+            <option value="qaoa">QAOA (Quantum Approximate Optimization)</option>
+            <option value="vqe">VQE (Variational Quantum Eigensolver)</option>
+            <option value="qisa">Quantum-Inspired Annealing (QISA)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="reps-slider">Circuit Repetitions / Depth (p):</label>
+          <input type="range" id="reps-slider" class="custom-slider" min="1" max="3" value="1" oninput="document.getElementById('reps-val').textContent = this.value">
+          <span style="font-size: 12px; color: #94a3b8;">Depth: <b id="reps-val" style="color:#a78bfa;">1</b> layer(s)</span>
+        </div>
+
+        <div class="form-group">
+          <label for="traffic-slider">Live Traffic Multiplier:</label>
+          <input type="range" id="traffic-slider" class="custom-slider" min="1.0" max="3.0" step="0.1" value="1.0" oninput="document.getElementById('traffic-val').textContent = this.value + 'x'">
+          <span style="font-size: 12px; color: #94a3b8;">Congestion: <b id="traffic-val" style="color:#38bdf8;">1.0x</b></span>
+        </div>
+
+        <button id="run-optimize-btn" class="btn-primary" style="margin-top: 8px;">
+          <i class="fa-solid fa-atom"></i>
+          <span>Execute Quantum Solver</span>
+        </button>
+
+        <hr style="border-color: rgba(255,255,255,0.08); margin: 6px 0;">
+
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <button id="open-order-modal-btn" class="btn-secondary">
+            <i class="fa-solid fa-plus-circle" style="color:#ec4899;"></i> Inject Urgent Order
+          </button>
+          <button id="open-traffic-modal-btn" class="btn-secondary">
+            <i class="fa-solid fa-triangle-exclamation" style="color:#f59e0b;"></i> Simulate Traffic Jam
+          </button>
+        </div>
+      </aside>
+
+      <!-- Main Content Area with Tabs -->
+      <main>
+        <!-- Tab Navigation -->
+        <nav class="tab-navigation">
+          <button class="tab-btn active" data-tab="tab-map"><i class="fa-solid fa-map-location-dot"></i> Fleet Map</button>
+          <button class="tab-btn" data-tab="tab-playback"><i class="fa-solid fa-film"></i> Live Playback</button>
+          <button class="tab-btn" data-tab="tab-telemetry"><i class="fa-solid fa-atom"></i> Quantum Telemetry</button>
+          <button class="tab-btn" data-tab="tab-arena"><i class="fa-solid fa-trophy"></i> Solver Arena</button>
+          <button class="tab-btn" data-tab="tab-manifest"><i class="fa-solid fa-file-lines"></i> Manifest & CSV</button>
+        </nav>
+
+        <!-- TAB 1: FLEET MAP -->
+        <div id="tab-map" class="tab-content active">
+          <div class="glass-panel" style="padding: 16px;">
+            <div id="map"></div>
+          </div>
+        </div>
+
+        <!-- TAB 2: LIVE TRANSIT PLAYBACK -->
+        <div id="tab-playback" class="tab-content">
+          <div class="glass-panel" style="padding: 24px;">
+            <h3 style="font-size: 18px; margin-bottom: 8px; color: #c4b5fd;">
+              <i class="fa-solid fa-truck-fast"></i> Real-Time Vehicle Transit & Delivery Playback
+            </h3>
+            <p style="font-size: 13px; color: #94a3b8; margin-bottom: 18px;">
+              Animate vehicle transit step-by-step along the quantum-optimized route schedule.
+            </p>
+
+            <div style="display: flex; gap: 14px; align-items: center; margin-bottom: 24px;">
+              <button id="playback-play-btn" class="btn-primary" style="padding: 8px 18px; font-size: 13px;">
+                ▶ Play
+              </button>
+              <input type="range" id="playback-slider" class="custom-slider" min="1" max="6" value="1" style="flex: 1;">
+            </div>
+
+            <div id="playback-fleet-status" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+              <!-- Dynamic Fleet Cards -->
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 3: QUANTUM CIRCUIT & TELEMETRY -->
+        <div id="tab-telemetry" class="tab-content">
+          <div class="glass-panel" style="padding: 24px; margin-bottom: 20px;">
+            <h3 style="font-size: 18px; margin-bottom: 14px; color: #c4b5fd;">
+              <i class="fa-solid fa-microchip"></i> Qiskit Quantum Circuit Architecture & Metrics
+            </h3>
+
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px;">
+              <div class="glass-panel" style="padding: 12px; text-align: center;">
+                <span style="font-size: 11px; color: #94a3b8; text-transform: uppercase;">Qubits (N)</span>
+                <h4 id="tele-qubits" style="font-size: 20px; color: #a78bfa; margin-top: 4px;">4</h4>
+              </div>
+              <div class="glass-panel" style="padding: 12px; text-align: center;">
+                <span style="font-size: 11px; color: #94a3b8; text-transform: uppercase;">Circuit Depth</span>
+                <h4 id="tele-depth" style="font-size: 20px; color: #38bdf8; margin-top: 4px;">8</h4>
+              </div>
+              <div class="glass-panel" style="padding: 12px; text-align: center;">
+                <span style="font-size: 11px; color: #94a3b8; text-transform: uppercase;">CNOT Gates</span>
+                <h4 id="tele-cnot" style="font-size: 20px; color: #f472b6; margin-top: 4px;">6</h4>
+              </div>
+              <div class="glass-panel" style="padding: 12px; text-align: center;">
+                <span style="font-size: 11px; color: #94a3b8; text-transform: uppercase;">Parameters (θ/γ)</span>
+                <h4 id="tele-params" style="font-size: 20px; color: #34d399; margin-top: 4px;">2</h4>
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+              <div>
+                <h4 style="font-size: 14px; color: #cbd5e1; margin-bottom: 8px;">Optimizer Energy Convergence ⟨H_C⟩</h4>
+                <canvas id="convergence-chart" height="180"></canvas>
+              </div>
+              <div>
+                <h4 style="font-size: 14px; color: #cbd5e1; margin-bottom: 8px;">Sampled Ground State Probabilities |x⟩</h4>
+                <canvas id="basis-chart" height="180"></canvas>
+              </div>
+            </div>
+
+            <h4 style="font-size: 14px; color: #cbd5e1; margin: 20px 0 8px 0;">Qiskit Circuit Schematic (ASCII)</h4>
+            <pre class="code-box" id="ascii-circuit-code">Generating Qiskit circuit schematic...</pre>
+          </div>
+        </div>
+
+        <!-- TAB 4: BENCHMARK ARENA -->
+        <div id="tab-arena" class="tab-content">
+          <div class="glass-panel" style="padding: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <div>
+                <h3 style="font-size: 18px; color: #c4b5fd;"><i class="fa-solid fa-flag-checkered"></i> Quantum vs Classical Solver Arena</h3>
+                <p style="font-size: 13px; color: #94a3b8;">Side-by-side performance race across route distance and emissions.</p>
+              </div>
+              <button id="run-bench-btn" class="btn-primary" style="padding: 8px 18px; font-size: 13px;">
+                <i class="fa-solid fa-bolt"></i> Run Solver Benchmark
+              </button>
+            </div>
+            <canvas id="arena-chart" height="140"></canvas>
+          </div>
+        </div>
+
+        <!-- TAB 5: MANIFEST & EXPORT -->
+        <div id="tab-manifest" class="tab-content">
+          <div class="glass-panel" style="padding: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <h3 style="font-size: 18px; color: #c4b5fd;"><i class="fa-solid fa-clipboard-list"></i> Fleet Dispatch Schedule Manifest</h3>
+              <button id="export-csv-btn" class="btn-primary" style="padding: 8px 18px; font-size: 13px;">
+                <i class="fa-solid fa-download"></i> Export CSV
+              </button>
+            </div>
+            <div style="overflow-x: auto;">
+              <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
+                <thead>
+                  <tr style="border-bottom: 1px solid rgba(255,255,255,0.12); color: #94a3b8;">
+                    <th style="padding: 10px;">Vehicle</th>
+                    <th style="padding: 10px;">Type</th>
+                    <th style="padding: 10px;">Route Sequence</th>
+                    <th style="padding: 10px; text-align:right;">Distance</th>
+                    <th style="padding: 10px; text-align:right;">Duration</th>
+                    <th style="padding: 10px; text-align:right;">CO2 (kg)</th>
+                    <th style="padding: 10px; text-align:right;">Cost</th>
+                  </tr>
+                </thead>
+                <tbody id="manifest-tbody">
+                  <!-- Dynamic rows -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- URGENT ORDER MODAL -->
+  <div id="order-modal" class="modal-overlay">
+    <div class="modal-content">
+      <h3 style="font-size: 18px; margin-bottom: 12px; color: #ec4899;"><i class="fa-solid fa-truck-medical"></i> Inject Urgent Delivery Order</h3>
+      <div class="form-group" style="margin-bottom: 12px;">
+        <label>Customer / Order Name:</label>
+        <input type="text" id="order-name" class="custom-input" value="Urgent Cardiac Sample Transport">
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+        <div class="form-group">
+          <label>Latitude:</label>
+          <input type="number" id="order-lat" class="custom-input" value="17.7340" step="0.001">
+        </div>
+        <div class="form-group">
+          <label>Longitude:</label>
+          <input type="number" id="order-lon" class="custom-input" value="83.3180" step="0.001">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom: 18px;">
+        <label>Cargo Demand (kg):</label>
+        <input type="number" id="order-demand" class="custom-input" value="4.0" step="0.5">
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button id="close-order-modal" class="btn-secondary">Cancel</button>
+        <button id="submit-urgent-order" class="btn-primary">⚡ Quantum Re-Dispatch</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRAFFIC JAM MODAL -->
+  <div id="traffic-modal" class="modal-overlay">
+    <div class="modal-content">
+      <h3 style="font-size: 18px; margin-bottom: 12px; color: #f59e0b;"><i class="fa-solid fa-traffic-light"></i> Simulate Road Congestion Surge</h3>
+      <div class="form-group" style="margin-bottom: 18px;">
+        <label>Congestion Multiplier (Nx):</label>
+        <input type="range" id="traffic-factor" class="custom-slider" min="2.0" max="5.0" step="0.5" value="3.5">
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button id="close-traffic-modal" class="btn-secondary">Cancel</button>
+        <button id="submit-traffic-incident" class="btn-primary">⚠️ Re-Route Fleet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- External JS Dependencies -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- Quantex App Script -->
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
