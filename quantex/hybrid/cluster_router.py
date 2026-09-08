@@ -5,7 +5,6 @@ Decomposes large delivery networks into vehicle clusters and routes each cluster
 
 from typing import Dict, List, Tuple, Optional, Any
 import numpy as np
-from sklearn.cluster import KMeans
 
 from quantex.core.problem_model import RoutingProblem, Vehicle, DeliveryNode
 from quantex.core.qubo_formulator import QUBOFormulator
@@ -14,6 +13,39 @@ from quantex.quantum.vqe_solver import VQESolver
 from quantex.quantum.quantum_inspired import QuantumInspiredSolver
 from quantex.classical.classical_solvers import ClassicalSolvers
 from quantex.core.emissions import GreenLogisticsEngine
+
+
+def numpy_kmeans(coords: np.ndarray, k: int, max_iter: int = 50, seed: int = 42) -> np.ndarray:
+    """
+    Pure NumPy implementation of K-Means clustering.
+    Zero external dependencies, fast and memory-efficient.
+    """
+    n = coords.shape[0]
+    if n <= k:
+        return np.arange(n)
+
+    rng = np.random.RandomState(seed)
+    # Initialize centroids randomly from points
+    centroids = coords[rng.choice(n, k, replace=False)].copy()
+    labels = np.zeros(n, dtype=int)
+
+    for _ in range(max_iter):
+        # Calculate distances from each point to each centroid
+        # shape: (n, k)
+        distances = np.linalg.norm(coords[:, np.newaxis, :] - centroids[np.newaxis, :, :], axis=2)
+        new_labels = np.argmin(distances, axis=1)
+
+        if np.array_equal(labels, new_labels):
+            break
+        labels = new_labels
+
+        # Recompute centroids
+        for cluster_idx in range(k):
+            members = coords[labels == cluster_idx]
+            if len(members) > 0:
+                centroids[cluster_idx] = np.mean(members, axis=0)
+
+    return labels
 
 
 class HybridClusterRouter:
@@ -40,17 +72,15 @@ class HybridClusterRouter:
             return [[problem.depot_idx] for _ in range(num_vehicles)]
 
         if num_vehicles == 1 or len(non_depot_indices) <= num_vehicles:
-            # Simple division
             clusters = [[] for _ in range(num_vehicles)]
             for idx, node_idx in enumerate(non_depot_indices):
                 clusters[idx % num_vehicles].append(node_idx)
             return clusters
 
-        # Coordinate-based K-Means clustering
+        # Coordinate-based pure NumPy K-Means clustering
         coords = np.array([[problem.nodes[i].lat, problem.nodes[i].lon] for i in non_depot_indices])
         n_clusters = min(num_vehicles, len(non_depot_indices))
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-        labels = kmeans.fit_predict(coords)
+        labels = numpy_kmeans(coords, k=n_clusters)
 
         clusters = [[] for _ in range(num_vehicles)]
         for node_idx, label in zip(non_depot_indices, labels):
@@ -61,11 +91,9 @@ class HybridClusterRouter:
             v_cap = problem.vehicles[v_idx].capacity
             cluster_demand = sum(problem.nodes[i].demand for i in cluster)
             if cluster_demand > v_cap and len(clusters) > 1:
-                # Move excess demand to next available vehicle with space
                 while cluster_demand > v_cap and len(cluster) > 1:
                     moved_node = cluster.pop()
                     cluster_demand -= problem.nodes[moved_node].demand
-                    # Find vehicle with least load
                     other_v = min(
                         [i for i in range(num_vehicles) if i != v_idx],
                         key=lambda x: sum(problem.nodes[n].demand for n in clusters[x])
@@ -104,25 +132,48 @@ class HybridClusterRouter:
 
         if self.quantum_backend == "qaoa" and k <= self.max_cluster_size_quantum:
             H_c, ising_offset = QUBOFormulator.get_sparse_pauli_op(Q, offset)
-            solver = QAOASolver(reps=self.qaoa_reps)
+            solver = QAOASolver(reps=self.qaoa_reps, max_iter=40)
             res = solver.solve(H_c, offset=ising_offset, num_nodes=k, fix_depot=True)
             sub_route = res["optimal_route"]
-            info = res
+            info = {
+                "solver": res.get("solver", "QAOA"),
+                "num_qubits": res.get("num_qubits", (k-1)*(k-1)),
+                "optimal_energy": res.get("optimal_energy", 0.0),
+                "runtime_sec": res.get("runtime_sec", 0.0),
+                "convergence": res.get("convergence", []),
+                "state_distribution": res.get("state_distribution", {}),
+                "circuit": res.get("circuit")
+            }
 
         elif self.quantum_backend == "vqe" and k <= self.max_cluster_size_quantum:
             H_c, ising_offset = QUBOFormulator.get_sparse_pauli_op(Q, offset)
-            solver = VQESolver(reps=2)
+            solver = VQESolver(reps=2, max_iter=40)
             res = solver.solve(H_c, offset=ising_offset, num_nodes=k, fix_depot=True)
             sub_route = res["optimal_route"]
-            info = res
+            info = {
+                "solver": res.get("solver", "VQE"),
+                "num_qubits": res.get("num_qubits", (k-1)*(k-1)),
+                "optimal_energy": res.get("optimal_energy", 0.0),
+                "runtime_sec": res.get("runtime_sec", 0.0),
+                "convergence": res.get("convergence", []),
+                "state_distribution": res.get("state_distribution", {}),
+                "circuit": res.get("circuit")
+            }
 
         else:
             # Scalable Quantum-Inspired Annealing (QISA)
-            qisa = QuantumInspiredSolver(num_sweeps=400)
+            qisa = QuantumInspiredSolver(num_sweeps=250)
             res = qisa.solve(Q, offset=offset, num_nodes=k)
             route_decoded, _ = QUBOFormulator.decode_tsp_solution(res["bitstring"], num_nodes=k, fix_depot=True)
             sub_route = route_decoded
-            info = res
+            info = {
+                "solver": "Quantum-Inspired Simulated Annealing (QISA)",
+                "num_qubits": (k-1)*(k-1),
+                "optimal_energy": res.get("energy", 0.0),
+                "runtime_sec": res.get("runtime_sec", 0.0),
+                "convergence": res.get("convergence", []),
+                "state_distribution": {res.get("bitstring", "0"*((k-1)*(k-1))): 1.0}
+            }
 
         # Map sub-route back to global node IDs
         global_route = [sub_indices[i] for i in sub_route]
@@ -137,7 +188,6 @@ class HybridClusterRouter:
         vehicle_routes = []
         total_quantum_cost = 0.0
         fleet_sustainability = []
-
         sub_solver_telemetry = []
 
         for v_idx, cluster in enumerate(clusters):
@@ -147,7 +197,6 @@ class HybridClusterRouter:
             total_quantum_cost += cost
             sub_solver_telemetry.append(info)
 
-            # Route sustainability metrics
             metrics = GreenLogisticsEngine.evaluate_route_sustainability(route, problem, vehicle)
             metrics["vehicle_id"] = vehicle.id
             metrics["vehicle_name"] = vehicle.name

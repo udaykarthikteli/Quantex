@@ -139,4 +139,4 @@ class QuantumCircuitBuilder:
     @classmethod
     def draw_circuit_ascii(cls, qc: QuantumCircuit) -> str:
         """Renders circuit to formatted ASCII text."""
-        return qc.draw(output="text", fold=100)
+        return str(qc.draw(output="text", fold=100))

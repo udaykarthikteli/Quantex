@@ -27,7 +27,7 @@ class QAOASolver:
         self,
         reps: int = 1,
         optimizer_name: str = "COBYLA",
-        max_iter: int = 80,
+        max_iter: int = 25,
         shots: int = 1024,
         seed: int = 42
     ):
