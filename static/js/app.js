@@ -1,6 +1,6 @@
 /**
  * Quantex Quantum Fleet Optimization Engine - Interactive Client App
- * Three.js 3D Quantum Particle Background + Leaflet Maps + Chart.js Telemetry
+ * Three.js 3D Quantum Space Background + Leaflet Maps + Chart.js Telemetry
  */
 
 let mapInstance = null;
@@ -15,19 +15,51 @@ let benchmarkChart = null;
 let playbackTimer = null;
 let isPlaying = false;
 let playbackStep = 0;
-let vehicleMarkers = [];
+let animatedVehicleMarkers = [];
 
 // Palette for vehicles
 const VEHICLE_COLORS = ["#8B5CF6", "#06B6D4", "#10B981", "#EC4899", "#F59E0B"];
 
-document.addEventListener("DOMContentLoaded", () => {
-  initThreeJSBackground();
-  initLeafletMap();
-  initTabs();
-  loadPresets();
-  setupEventListeners();
-  runOptimization(); // Initial run
+document.addEventListener("DOMContentLoaded", async () => {
+  try {
+    initThreeJSBackground();
+    initLeafletMap();
+    initTabs();
+    await loadPresets();
+    setupEventListeners();
+    await runOptimization(); // Initial run after presets are loaded
+  } catch (err) {
+    console.error("Initialization error:", err);
+  }
 });
+
+// ----------------- TOAST NOTIFICATION SYSTEM -----------------
+function showNotification(message, type = "info") {
+  let container = document.getElementById("toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    container.style.cssText = "position:fixed; top:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:10px;";
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement("div");
+  const bg = type === "success" ? "#10B981" : type === "warning" ? "#F59E0B" : type === "error" ? "#EF4444" : "#8B5CF6";
+  toast.style.cssText = `background:${bg}; color:white; padding:12px 20px; border-radius:10px; font-weight:600; font-size:13px; box-shadow:0 8px 24px rgba(0,0,0,0.4); backdrop-filter:blur(8px); transition:all 0.3s ease; opacity:0; transform:translateY(-10px);`;
+  toast.textContent = message;
+
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = "1";
+    toast.style.transform = "translateY(0)";
+  }, 50);
+
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateY(-10px)";
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
+}
 
 // ----------------- 1. THREE.JS 3D QUANTUM BACKGROUND -----------------
 function initThreeJSBackground() {
@@ -43,7 +75,6 @@ function initThreeJSBackground() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   container.appendChild(renderer.domElement);
 
-  // 1. Quantum Bloch Spheres
   const spheresGroup = new THREE.Group();
   scene.add(spheresGroup);
 
@@ -68,7 +99,6 @@ function initThreeJSBackground() {
       (Math.random() - 0.5) * 40
     );
 
-    // Orbit Ring
     const ringMat = new THREE.MeshBasicMaterial({
       color: 0xec4899,
       side: THREE.DoubleSide,
@@ -87,7 +117,6 @@ function initThreeJSBackground() {
     });
   }
 
-  // 2. Quantum Particle Field
   const particleCount = 200;
   const posArray = new Float32Array(particleCount * 3);
 
@@ -108,7 +137,6 @@ function initThreeJSBackground() {
   const particleSystem = new THREE.Points(particleGeo, particleMat);
   scene.add(particleSystem);
 
-  // Mouse Interaction
   let mouseX = 0;
   let mouseY = 0;
   window.addEventListener("mousemove", (e) => {
@@ -150,13 +178,17 @@ function initLeafletMap() {
 
   mapInstance = L.map("map", { zoomControl: true }).setView([17.7215, 83.3060], 13);
 
-  // Dark theme CartoDB tiles
   L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap',
+    attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
     maxZoom: 19
   }).addTo(mapInstance);
 
   markerLayerGroup = L.layerGroup().addTo(mapInstance);
+
+  // Invalidate map size to prevent gray tiles
+  setTimeout(() => {
+    mapInstance.invalidateSize();
+  }, 300);
 }
 
 // ----------------- 3. TAB CONTROLLER -----------------
@@ -173,7 +205,7 @@ function initTabs() {
       if (targetContent) targetContent.classList.add("active");
 
       if (targetId === "tab-map" && mapInstance) {
-        setTimeout(() => mapInstance.invalidateSize(), 200);
+        setTimeout(() => mapInstance.invalidateSize(), 150);
       }
     });
   });
@@ -195,16 +227,21 @@ async function loadPresets() {
     });
   } catch (err) {
     console.error("Failed to load presets", err);
+    showNotification("Failed to connect to backend API.", "error");
   }
 }
 
 // ----------------- 5. QUANTUM OPTIMIZATION CALL -----------------
 async function runOptimization() {
   const btn = document.getElementById("run-optimize-btn");
-  if (btn) btn.disabled = true;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Optimizing Quantum Circuit...`;
+  }
 
-  const presetName = document.getElementById("preset-select").value;
-  const solverType = document.getElementById("solver-select").value;
+  const presetSelect = document.getElementById("preset-select");
+  const presetName = presetSelect && presetSelect.value ? presetSelect.value : "E-Commerce Last-Mile Express";
+  const solverType = document.getElementById("solver-select").value || "qaoa";
   const qaoaReps = parseInt(document.getElementById("reps-slider").value) || 1;
   const trafficMultiplier = parseFloat(document.getElementById("traffic-slider").value) || 1.0;
 
@@ -220,6 +257,8 @@ async function runOptimization() {
       })
     });
 
+    if (!response.ok) throw new Error("Optimization failed on backend");
+
     const data = await response.json();
     currentOptimizationData = data;
 
@@ -228,12 +267,18 @@ async function runOptimization() {
     renderTelemetry(data);
     renderManifestTable(data);
     renderPlaybackControls(data);
+    populateTrafficModalDropdowns(data);
+
+    showNotification(`⚡ Quantum Optimization Complete via ${solverType.toUpperCase()}!`, "success");
 
   } catch (error) {
     console.error("Optimization failed:", error);
-    alert("Optimization request failed. Check server console.");
+    showNotification("Optimization error. Ensure backend server is running.", "error");
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<i class="fa-solid fa-atom"></i> <span>Execute Quantum Solver</span>`;
+    }
   }
 }
 
@@ -258,11 +303,10 @@ function updateKPICards(data) {
   document.getElementById("kpi-cost-delta").textContent = comp.cost_saved_usd > 0 ? `-$${comp.cost_saved_usd} saved` : "Optimal";
 }
 
-// ----------------- 7. RENDER MAP & WAYPOINTS -----------------
+// ----------------- 7. RENDER MAP & VISIBLE DEPOT -----------------
 function renderMapRoutes(data) {
-  if (!mapInstance) return;
+  if (!mapInstance || !markerLayerGroup) return;
 
-  // Clear previous layers
   markerLayerGroup.clearLayers();
   routePolylines.forEach((poly) => mapInstance.removeLayer(poly));
   routePolylines = [];
@@ -270,38 +314,48 @@ function renderMapRoutes(data) {
   const nodes = data.nodes;
   const bounds = [];
 
-  // 1. Add Depot Marker
+  // 1. Visible, High-Contrast Red Depot Marker
   const depot = nodes.find((n) => n.is_depot) || nodes[0];
   const depotIcon = L.divIcon({
-    className: "custom-depot-icon",
-    html: `<div class="pulse-dot" style="background:#ef4444;"></div>`,
-    iconSize: [20, 20],
-    iconAnchor: [10, 10]
+    className: "depot-map-marker",
+    html: `
+      <div style="background:#EF4444; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:3px solid #ffffff; box-shadow:0 0 16px #ef4444; color:white; font-size:12px;">
+        <i class="fa-solid fa-warehouse"></i>
+      </div>
+    `,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14]
   });
 
-  const depotMarker = L.marker([depot.lat, depot.lon], { icon: depotIcon })
-    .bindPopup(`<b>🏢 CENTRAL DEPOT</b><br>${depot.name}`)
+  L.marker([depot.lat, depot.lon], { icon: depotIcon })
+    .bindPopup(`<b style="color:#EF4444; font-size:14px;"><i class="fa-solid fa-warehouse"></i> CENTRAL DEPOT</b><br>${depot.name}`)
     .addTo(markerLayerGroup);
+
   bounds.push([depot.lat, depot.lon]);
 
-  // 2. Add Customer Waypoints
+  // 2. Visible Customer Waypoints
   nodes.forEach((node) => {
     if (!node.is_depot) {
-      const priorityLabel = node.priority >= 4 ? "🔴 Urgent" : "🟢 Normal";
+      const isUrgent = node.priority >= 4;
+      const color = isUrgent ? "#F43F5E" : "#38BDF8";
       const icon = L.divIcon({
-        className: "custom-node-icon",
-        html: `<div style="background:#38bdf8; width:12px; height:12px; border-radius:50%; border:2px solid #ffffff; box-shadow:0 0 8px #38bdf8;"></div>`,
-        iconSize: [14, 14],
-        iconAnchor: [7, 7]
+        className: "customer-map-marker",
+        html: `
+          <div style="background:${color}; width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:2px solid #ffffff; box-shadow:0 0 12px ${color}; color:white; font-size:10px;">
+            ${node.id}
+          </div>
+        `,
+        iconSize: [22, 22],
+        iconAnchor: [11, 11]
       });
 
       L.marker([node.lat, node.lon], { icon })
         .bindPopup(`
-          <div style="font-family:sans-serif;">
-            <b style="color:#8b5cf6;">📦 ${node.name}</b><br>
-            <b>Demand:</b> ${node.demand} units<br>
+          <div style="font-family:sans-serif; min-width:160px;">
+            <b style="color:#8b5cf6; font-size:13px;">📦 Stop ${node.id}: ${node.name}</b><br>
+            <b>Demand:</b> ${node.demand} kg<br>
             <b>Time Window:</b> ${node.tw_start} - ${node.tw_end} min<br>
-            <b>Priority:</b> ${priorityLabel}
+            <b>Priority:</b> ${isUrgent ? "🔴 High / Urgent" : "🟢 Normal"}
           </div>
         `)
         .addTo(markerLayerGroup);
@@ -310,7 +364,7 @@ function renderMapRoutes(data) {
     }
   });
 
-  // 3. Draw Vehicle Route Lines
+  // 3. Draw Vehicle Paths with Arrows
   data.routes.forEach((route, idx) => {
     if (route.length < 2) return;
     const color = VEHICLE_COLORS[idx % VEHICLE_COLORS.length];
@@ -319,7 +373,7 @@ function renderMapRoutes(data) {
 
     const poly = L.polyline(coords, {
       color: color,
-      weight: 4.5,
+      weight: 5,
       opacity: 0.9,
       lineJoin: "round"
     }).bindPopup(`<b>🚚 ${vehicle.name}</b> (${vehicle.type})<br>Stops: ${route.length} waypoints`);
@@ -329,7 +383,7 @@ function renderMapRoutes(data) {
   });
 
   if (bounds.length > 0) {
-    mapInstance.fitBounds(bounds, { padding: [40, 40] });
+    mapInstance.fitBounds(bounds, { padding: [50, 50] });
   }
 }
 
@@ -357,8 +411,8 @@ function renderTelemetry(data) {
   const convCtx = document.getElementById("convergence-chart");
   if (convCtx) {
     if (convergenceChart) convergenceChart.destroy();
-    const evals = data.convergence.map((c) => c[0]);
-    const costs = data.convergence.map((c) => c[1]);
+    const evals = (data.convergence || []).map((c) => c[0]);
+    const costs = (data.convergence || []).map((c) => c[1]);
 
     convergenceChart = new Chart(convCtx, {
       type: "line",
@@ -388,8 +442,8 @@ function renderTelemetry(data) {
   const distCtx = document.getElementById("basis-chart");
   if (distCtx) {
     if (basisStateChart) basisStateChart.destroy();
-    const states = Object.keys(data.state_distribution).slice(0, 8);
-    const probs = Object.values(data.state_distribution).slice(0, 8);
+    const states = Object.keys(data.state_distribution || {}).slice(0, 8);
+    const probs = Object.values(data.state_distribution || {}).slice(0, 8);
 
     basisStateChart = new Chart(distCtx, {
       type: "bar",
@@ -414,7 +468,7 @@ function renderTelemetry(data) {
   }
 }
 
-// ----------------- 9. LIVE FLEET PLAYBACK SIMULATOR -----------------
+// ----------------- 9. LIVE FLEET PLAYBACK -----------------
 function renderPlaybackControls(data) {
   const container = document.getElementById("playback-fleet-status");
   if (!container) return;
@@ -449,7 +503,7 @@ function updatePlaybackState(step) {
     card.innerHTML = `
       <h4 style="color:${VEHICLE_COLORS[vIdx % VEHICLE_COLORS.length]}; margin-bottom:6px;">🚚 ${v.name} (${v.type})</h4>
       <p style="font-size:13px; color:#cbd5e1;"><b>Current Stop:</b> ${currNode.name}</p>
-      <p style="font-size:12px; color:#94a3b8;"><b>Status:</b> ${currNode.is_depot ? "🏢 At Base Depot" : "📦 Delivering Package"}</p>
+      <p style="font-size:12px; color:#94a3b8;"><b>Status:</b> ${currNode.is_depot ? "🏢 At Central Depot" : "📦 Delivering Package"}</p>
       <div style="background:rgba(255,255,255,0.1); border-radius:10px; height:8px; margin-top:8px; overflow:hidden;">
         <div style="background:#8b5cf6; width:${((currIdx + 1) / route.length) * 100}%; height:100%;"></div>
       </div>
@@ -463,7 +517,10 @@ function updatePlaybackState(step) {
 async function runBenchmarkArena() {
   const presetName = document.getElementById("preset-select").value;
   const btn = document.getElementById("run-bench-btn");
-  if (btn) btn.disabled = true;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Running Benchmark Race...`;
+  }
 
   try {
     const res = await fetch(`/api/benchmark?preset_name=${encodeURIComponent(presetName)}`);
@@ -502,11 +559,16 @@ async function runBenchmarkArena() {
           }
         }
       });
+      showNotification("🏆 Multi-Solver Benchmark Complete!", "success");
     }
   } catch (err) {
     console.error("Benchmark failed:", err);
+    showNotification("Benchmark execution failed.", "error");
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<i class="fa-solid fa-bolt"></i> Run Solver Benchmark`;
+    }
   }
 }
 
@@ -549,14 +611,47 @@ function exportManifestCSV() {
   a.setAttribute("href", url);
   a.setAttribute("download", "quantex_fleet_dispatch.csv");
   a.click();
+  showNotification("📥 Fleet Dispatch CSV Exported!", "success");
+}
+
+function populateTrafficModalDropdowns(data) {
+  const fromSelect = document.getElementById("traffic-from-node");
+  const toSelect = document.getElementById("traffic-to-node");
+  if (!fromSelect || !toSelect) return;
+
+  fromSelect.innerHTML = "";
+  toSelect.innerHTML = "";
+
+  data.nodes.forEach((node) => {
+    const opt1 = document.createElement("option");
+    opt1.value = node.id;
+    opt1.textContent = `Stop ${node.id}: ${node.name}`;
+    fromSelect.appendChild(opt1);
+
+    const opt2 = document.createElement("option");
+    opt2.value = node.id;
+    opt2.textContent = `Stop ${node.id}: ${node.name}`;
+    toSelect.appendChild(opt2);
+  });
+
+  if (data.nodes.length > 2) {
+    toSelect.selectedIndex = 2;
+  }
 }
 
 // ----------------- 12. EVENT LISTENERS & MODALS -----------------
 function setupEventListeners() {
-  document.getElementById("run-optimize-btn").addEventListener("click", runOptimization);
-  document.getElementById("preset-select").addEventListener("change", runOptimization);
-  document.getElementById("solver-select").addEventListener("change", runOptimization);
-  document.getElementById("export-csv-btn").addEventListener("click", exportManifestCSV);
+  const runBtn = document.getElementById("run-optimize-btn");
+  if (runBtn) runBtn.addEventListener("click", runOptimization);
+
+  const presetSelect = document.getElementById("preset-select");
+  if (presetSelect) presetSelect.addEventListener("change", runOptimization);
+
+  const solverSelect = document.getElementById("solver-select");
+  if (solverSelect) solverSelect.addEventListener("change", runOptimization);
+
+  const exportBtn = document.getElementById("export-csv-btn");
+  if (exportBtn) exportBtn.addEventListener("click", exportManifestCSV);
 
   // Playback slider
   const slider = document.getElementById("playback-slider");
@@ -592,53 +687,106 @@ function setupEventListeners() {
 
   // Urgent Order Modal
   const orderModal = document.getElementById("order-modal");
-  document.getElementById("open-order-modal-btn").addEventListener("click", () => {
-    orderModal.style.display = "flex";
-  });
-  document.getElementById("close-order-modal").addEventListener("click", () => {
-    orderModal.style.display = "none";
-  });
-  document.getElementById("submit-urgent-order").addEventListener("click", async () => {
-    const name = document.getElementById("order-name").value;
-    const lat = parseFloat(document.getElementById("order-lat").value);
-    const lon = parseFloat(document.getElementById("order-lon").value);
-    const demand = parseFloat(document.getElementById("order-demand").value);
+  const openOrderBtn = document.getElementById("open-order-modal-btn");
+  const closeOrderBtn = document.getElementById("close-order-modal");
+  const submitOrderBtn = document.getElementById("submit-urgent-order");
 
-    const res = await fetch("/api/dynamic/inject-order", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, lat, lon, demand, solver_type: "qaoa" })
+  if (openOrderBtn) {
+    openOrderBtn.addEventListener("click", () => {
+      // Pre-fill coordinates around depot
+      if (currentOptimizationData && currentOptimizationData.nodes) {
+        const depot = currentOptimizationData.nodes.find((n) => n.is_depot) || currentOptimizationData.nodes[0];
+        document.getElementById("order-lat").value = (depot.lat + 0.012).toFixed(4);
+        document.getElementById("order-lon").value = (depot.lon + 0.008).toFixed(4);
+      }
+      orderModal.style.display = "flex";
     });
-    const data = await res.json();
-    currentOptimizationData = data;
-    updateKPICards(data);
-    renderMapRoutes(data);
-    renderManifestTable(data);
-    orderModal.style.display = "none";
-    alert(`⚡ ${data.message}`);
-  });
+  }
+  if (closeOrderBtn) {
+    closeOrderBtn.addEventListener("click", () => {
+      orderModal.style.display = "none";
+    });
+  }
+  if (submitOrderBtn) {
+    submitOrderBtn.addEventListener("click", async () => {
+      submitOrderBtn.disabled = true;
+      submitOrderBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Re-routing...`;
+
+      const name = document.getElementById("order-name").value || "Emergency Delivery";
+      const lat = parseFloat(document.getElementById("order-lat").value);
+      const lon = parseFloat(document.getElementById("order-lon").value);
+      const demand = parseFloat(document.getElementById("order-demand").value) || 2.0;
+
+      try {
+        const res = await fetch("/api/dynamic/inject-order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, lat, lon, demand, solver_type: "qaoa" })
+        });
+        const data = await res.json();
+        currentOptimizationData = data;
+        updateKPICards(data);
+        renderMapRoutes(data);
+        renderManifestTable(data);
+        renderPlaybackControls(data);
+        orderModal.style.display = "none";
+        showNotification(`⚡ Urgent Order Assigned: ${data.message}`, "success");
+      } catch (err) {
+        console.error(err);
+        showNotification("Failed to inject urgent order.", "error");
+      } finally {
+        submitOrderBtn.disabled = false;
+        submitOrderBtn.innerHTML = `⚡ Quantum Re-Dispatch`;
+      }
+    });
+  }
 
   // Traffic Modal
   const trafficModal = document.getElementById("traffic-modal");
-  document.getElementById("open-traffic-modal-btn").addEventListener("click", () => {
-    trafficModal.style.display = "flex";
-  });
-  document.getElementById("close-traffic-modal").addEventListener("click", () => {
-    trafficModal.style.display = "none";
-  });
-  document.getElementById("submit-traffic-incident").addEventListener("click", async () => {
-    const factor = parseFloat(document.getElementById("traffic-factor").value);
-    const res = await fetch("/api/dynamic/traffic", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ from_node: 1, to_node: 2, congestion_factor: factor, solver_type: "qaoa" })
+  const openTrafficBtn = document.getElementById("open-traffic-modal-btn");
+  const closeTrafficBtn = document.getElementById("close-traffic-modal");
+  const submitTrafficBtn = document.getElementById("submit-traffic-incident");
+
+  if (openTrafficBtn) {
+    openTrafficBtn.addEventListener("click", () => {
+      trafficModal.style.display = "flex";
     });
-    const data = await res.json();
-    currentOptimizationData = data;
-    updateKPICards(data);
-    renderMapRoutes(data);
-    renderManifestTable(data);
-    trafficModal.style.display = "none";
-    alert(`⚠️ ${data.message}`);
-  });
+  }
+  if (closeTrafficBtn) {
+    closeTrafficBtn.addEventListener("click", () => {
+      trafficModal.style.display = "none";
+    });
+  }
+  if (submitTrafficBtn) {
+    submitTrafficBtn.addEventListener("click", async () => {
+      submitTrafficBtn.disabled = true;
+      submitTrafficBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Re-routing...`;
+
+      const fromNode = parseInt(document.getElementById("traffic-from-node").value) || 0;
+      const toNode = parseInt(document.getElementById("traffic-to-node").value) || 1;
+      const factor = parseFloat(document.getElementById("traffic-factor").value) || 3.0;
+
+      try {
+        const res = await fetch("/api/dynamic/traffic", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ from_node: fromNode, to_node: toNode, congestion_factor: factor, solver_type: "qaoa" })
+        });
+        const data = await res.json();
+        currentOptimizationData = data;
+        updateKPICards(data);
+        renderMapRoutes(data);
+        renderManifestTable(data);
+        renderPlaybackControls(data);
+        trafficModal.style.display = "none";
+        showNotification(`⚠️ Road Congestion Injected: ${data.message}`, "warning");
+      } catch (err) {
+        console.error(err);
+        showNotification("Failed to simulate traffic incident.", "error");
+      } finally {
+        submitTrafficBtn.disabled = false;
+        submitTrafficBtn.innerHTML = `⚠️ Re-Route Fleet`;
+      }
+    });
+  }
 }
